@@ -1,0 +1,22 @@
+name: Build and Push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - run: |
+          docker build -t sardarabdulwakeel/argocdnodejsapp:latest .
+          docker push sardarabdulwakeel/argocdnodejsapp:latest
