@@ -1,0 +1,20 @@
+# Argo CD Application - use this to create/update the app in Argo CD
+# Apply with: kubectl apply -f argocd-application.yaml -n argocd
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-testing-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/wakeel39/argocd-testing-app.git  # update to your repo
+    path: k8s
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sardar   # must match metadata.namespace in deployment.yaml and service.yaml
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

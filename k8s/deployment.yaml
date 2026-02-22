@@ -15,6 +15,6 @@ spec:
     spec:
       containers:
         - name: node-app
-          image: sardarabdulwakeel/argocdnodejsapp:1.0
+          image: sardarabdulwakeel/argocdnodejsapp:latest
           ports:
             - containerPort: 3000
