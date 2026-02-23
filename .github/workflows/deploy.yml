@@ -10,13 +10,60 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 2
 
-      - uses: docker/login-action@v2
+      - name: Skip if this push was a version bump
+        id: skip
+        run: |
+          msg=$(git log -1 --pretty=%B)
+          if echo "$msg" | grep -q "chore: bump version to "; then
+            echo "skip_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        id: version
+        if: steps.skip.outputs.skip_build != 'true'
+        run: |
+          if [ -f VERSION ]; then
+            ver=$(cat VERSION)
+          else
+            ver="1.0.0"
+          fi
+          major=$(echo "$ver" | cut -d. -f1)
+          minor=$(echo "$ver" | cut -d. -f2)
+          patch=$(echo "$ver" | cut -d. -f3)
+          if [ "$patch" -ge 100 ]; then
+            minor=$((minor + 2))
+            patch=0
+          else
+            patch=$((patch + 1))
+          fi
+          new_ver="${major}.${minor}.${patch}"
+          echo "VERSION=$new_ver" >> $GITHUB_OUTPUT
+          echo "$new_ver" > VERSION
+
+      - name: Commit and push VERSION
+        if: steps.skip.outputs.skip_build != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git push || true
+
+      - uses: docker/login-action@v3
+        if: steps.skip.outputs.skip_build != 'true'
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - run: |
-          docker build -t sardarabdulwakeel/argocdnodejsapp:latest .
-          docker push sardarabdulwakeel/argocdnodejsapp:latest
+      - name: Build and push image
+        if: steps.skip.outputs.skip_build != 'true'
+        run: |
+          docker build -t sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }} .
+          docker push sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}
