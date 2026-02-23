@@ -47,13 +47,18 @@ jobs:
           echo "VERSION=$new_ver" >> $GITHUB_OUTPUT
           echo "$new_ver" > VERSION
 
-      - name: Commit and push VERSION
+      - name: Update image tag in k8s/deployment.yaml
+        if: steps.skip.outputs.skip_build != 'true'
+        run: |
+          sed -i "s|image: sardarabdulwakeel/argocdnodejsapp:.*|image: sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}|" k8s/deployment.yaml
+
+      - name: Commit and push VERSION and k8s/deployment.yaml
         if: steps.skip.outputs.skip_build != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION
-          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git add VERSION k8s/deployment.yaml
+          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }} and update deployment image tag"
           git push || true
 
       - uses: docker/login-action@v3
@@ -65,5 +70,6 @@ jobs:
       - name: Build and push image
         if: steps.skip.outputs.skip_build != 'true'
         run: |
-          docker build -t sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }} .
+          docker build -t sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }} -t sardarabdulwakeel/argocdnodejsapp:latest .
           docker push sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}
+          docker push sardarabdulwakeel/argocdnodejsapp:latest
