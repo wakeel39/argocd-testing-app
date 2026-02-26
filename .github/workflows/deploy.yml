@@ -47,19 +47,29 @@ jobs:
           echo "VERSION=$new_ver" >> $GITHUB_OUTPUT
           echo "$new_ver" > VERSION
 
-      - name: Update image tag in k8s/deployment.yaml
+      - name: Update image tag in k8s/deployment.yaml and ngnix/deployment.yml
         if: steps.skip.outputs.skip_build != 'true'
         run: |
           sed -i "s|image: sardarabdulwakeel/argocdnodejsapp:.*|image: sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}|" k8s/deployment.yaml
+          if [ -f ngnix/deployment.yml ]; then
+            sed -i "s|image: sardarabdulwakeel/argocdnodejsapp:.*|image: sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}|" ngnix/deployment.yml
+          fi
 
-      - name: Commit and push VERSION and k8s/deployment.yaml
+      - name: Commit and push VERSION and deployment files
         if: steps.skip.outputs.skip_build != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION k8s/deployment.yaml
+          [ -f ngnix/deployment.yml ] && git add ngnix/deployment.yml
           git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }} and update deployment image tag"
           git push || true
+
+      - name: Create and push GitHub tag
+        if: steps.skip.outputs.skip_build != 'true'
+        run: |
+          git tag "v${{ steps.version.outputs.VERSION }}"
+          git push origin "v${{ steps.version.outputs.VERSION }}"
 
       - uses: docker/login-action@v3
         if: steps.skip.outputs.skip_build != 'true'
