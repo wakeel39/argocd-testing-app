@@ -1,0 +1,29 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "argocdnodejsapp.fullname" . }}-ingress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "argocdnodejsapp.labels" . | nindent 4 }}
+  {{- if .Values.ingress.alb.enabled }}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: {{ .Values.ingress.alb.scheme }}
+    alb.ingress.kubernetes.io/ssl-redirect: "{{ .Values.ingress.alb.sslRedirect }}"
+    alb.ingress.kubernetes.io/target-type: ip
+  {{- end }}
+spec:
+  ingressClassName: {{ if .Values.ingress.alb.enabled }}alb{{ else }}{{ .Values.ingress.className }}{{ end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ .Values.service.name }}
+                port:
+                  number: {{ .Values.servicePort }}
+{{- end }}
