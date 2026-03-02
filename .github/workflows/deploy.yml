@@ -57,21 +57,21 @@ jobs:
       #     argocd app wait "$ARGOCD_APP_NAME" --health --timeout 300
       #     argocd app get "$ARGOCD_APP_NAME" --show-operation
 
-      # - name: Create and push GitHub tag (visible in repo Tags)
-      #   run: |
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "github-actions[bot]@users.noreply.github.com"
-      #     git tag "v${{ steps.version.outputs.VERSION }}"
-      #     git push origin "v${{ steps.version.outputs.VERSION }}"
+      # Commit devops only for the tag (do not push to master — temp folder lives only in the tagged commit)
+      - name: Commit devops for release tag only
+        run: |
+          rm -rf devops/helm-chart/.git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add devops/
+          git commit -m "chore: devops snapshot for release v${{ steps.version.outputs.VERSION }}"
+          # Do not push master — only the tag will be pushed, so this commit exists only at the tag
 
-      - name: Create Release Tag
-        if: success()
-        continue-on-error: true
-        uses: wakeel39/github-actions/.github/actions/create-release-tag@main
-        with:
-          github_token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          tag: "v${{ steps.version.outputs.VERSION }}"
+      # Push only the tag (commit with devops/ is sent as the tag target); master is never pushed
+      - name: Create and push release tag only
+        run: |
+          git tag "v${{ steps.version.outputs.VERSION }}"
+          git push origin "v${{ steps.version.outputs.VERSION }}"
 
       - name: Remove temp folder
         run: rm -rf devops
