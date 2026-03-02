@@ -28,7 +28,7 @@ jobs:
           sed -i "s/^  tag: .*/  tag: ${{ steps.version.outputs.VERSION }}/" devops/helm-chart/values.yaml
           ls -la devops/helm-chart/
           grep "tag:" devops/helm-chart/values.yaml
-          ls -la devops/
+        
 
       # 2) Then: build and push image to Docker (helm-chart already has updated tag in values)
       - uses: docker/login-action@v3
