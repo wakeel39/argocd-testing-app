@@ -33,7 +33,7 @@ jobs:
       # Add secret HELM_CHART_REPO_TOKEN (GitHub PAT with repo scope) in repo Settings → Secrets
       - name: Clone helm-chart repo and set image tag
         env:
-          HELM_CHART_TOKEN: ${{ secrets.HELM_CHART_REPO_TOKEN }}
+          HELM_CHART_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           git clone https://x-access-token:${HELM_CHART_TOKEN}@github.com/wakeel39/helm-chart.git deploy-temp/helm-chart
           sed -i "s/^  tag: .*/  tag: ${{ steps.version.outputs.VERSION }}/" devops/helm-chart/values.yaml
@@ -43,17 +43,17 @@ jobs:
           curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x argocd && sudo mv argocd /usr/local/bin/
 
-      - name: Argo CD sync
-        env:
-          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
-          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
-          ARGOCD_APP_NAME: ${{ secrets.ARGOCD_APP_NAME }}
-        run: |
-          argocd login $ARGOCD_SERVER --username "$ARGOCD_USERNAME" --password "$ARGOCD_PASSWORD" --insecure
-          argocd app sync "$ARGOCD_APP_NAME" --local-repo-root "$GITHUB_WORKSPACE/deploy/devops" --local helm-chart --force
-          argocd app wait "$ARGOCD_APP_NAME" --health --timeout 300
-          argocd app get "$ARGOCD_APP_NAME" --show-operation
+      # - name: Argo CD sync
+      #   env:
+      #     ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+      #     ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+      #     ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+      #     ARGOCD_APP_NAME: ${{ secrets.ARGOCD_APP_NAME }}
+      #   run: |
+      #     argocd login $ARGOCD_SERVER --username "$ARGOCD_USERNAME" --password "$ARGOCD_PASSWORD" --insecure
+      #     argocd app sync "$ARGOCD_APP_NAME" --local-repo-root "$GITHUB_WORKSPACE/deploy/devops" --local helm-chart --force
+      #     argocd app wait "$ARGOCD_APP_NAME" --health --timeout 300
+      #     argocd app get "$ARGOCD_APP_NAME" --show-operation
 
       # - name: Create and push GitHub tag (visible in repo Tags)
       #   run: |
