@@ -73,5 +73,28 @@ jobs:
           git tag "v${{ steps.version.outputs.VERSION }}"
           git push origin "v${{ steps.version.outputs.VERSION }}"
 
+      # Zip source (exclude .git, node_modules, devops) for artifact and release
+      - name: Archive source code
+        run: zip -r release-source.zip . -x '.git/*' -x 'node_modules/*' -x 'devops/*' -x '*.zip'
+
+      # Upload source zip as workflow artifact (download from Actions → Summary → Artifacts)
+      - name: Upload source code artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argocdnodejsapp-source-v${{ steps.version.outputs.VERSION }}
+          path: release-source.zip
+          retention-days: 90
+
+      # Create GitHub Release and attach source zip (Releases page)
+      - name: Create Release and upload source
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: Release v${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          files: release-source.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Remove temp folder
         run: rm -rf devops

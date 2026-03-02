@@ -2,15 +2,21 @@
 
 aws_region   = "us-east-1"   # Boston / East Coast
 environment  = "dev"
-cluster_name = "argocdnodejsapp-eks"
+cluster_name    = "argocdnodejsapp-eks"
+# Match existing cluster version (e.g. 1.29); upgrade one minor version at a time (1.29 → 1.30 → …)
+cluster_version = "1.29"
 
 node_desired_size    = 2
 node_min_size        = 1
 node_max_size        = 5
-node_instance_types  = ["t3.medium"]
+# Free Tier eligible: t3.micro (use t3.small/t3.medium if not restricted)
+node_instance_types  = ["t3.micro"]
 
 enable_cluster_encryption = true
 enable_private_endpoint   = false
+
+# Set to false on first apply if Helm fails with "cluster unreachable"; then update-kubeconfig and set true and apply again
+# install_aws_load_balancer_controller = false
 
 tags = {
   Project = "argocdnodejsapp"

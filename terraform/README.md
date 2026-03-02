@@ -13,23 +13,34 @@ terraform plan
 terraform apply
 ```
 
-## Two-stage apply (recommended)
+On Windows, if `terraform apply -var-file=terraform.tfvars` fails with "cannot find the file specified", run `terraform apply` only (Terraform auto-loads `terraform.tfvars` from the current directory), or use: `terraform apply -var-file=".\terraform.tfvars"`.
 
-The Kubernetes/Helm providers depend on the EKS cluster. If the first apply fails on the Helm release, run:
+## Free Tier
+
+If you see **"instance type is not eligible for Free Tier"**, set `node_instance_types = ["t3.micro"]` in `terraform.tfvars` (already the default).
+
+## Two-stage apply (if Helm reports "cluster unreachable")
+
+The Kubernetes/Helm providers need the EKS cluster to be reachable. If the first apply fails on the Helm release with "cluster unreachable" or "provide credentials", either:
+
+**Option A – target apply then full apply**
 
 ```bash
-# Stage 1: VPC + EKS only
 terraform apply -target=module.vpc -target=module.eks
-
-# Stage 2: Load Balancer Controller (needs cluster)
+aws eks update-kubeconfig --region <your-region> --name <cluster_name>
 terraform apply
 ```
 
-Then configure kubectl:
+**Option B – disable LB controller for first apply**
+
+In `terraform.tfvars` set `install_aws_load_balancer_controller = false`, then:
 
 ```bash
+terraform apply
 aws eks update-kubeconfig --region <your-region> --name <cluster_name>
 ```
+
+Then set `install_aws_load_balancer_controller = true` and run `terraform apply` again.
 
 ## Boston / East Coast
 

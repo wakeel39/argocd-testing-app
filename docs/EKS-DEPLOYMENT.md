@@ -10,12 +10,13 @@ This guide explains how to deploy the application on **Amazon EKS** with a **loa
 2. [Prerequisites](#2-prerequisites)
 3. [Terraform: what each file does](#3-terraform-what-each-file-does)
 4. [Deploy infrastructure (EKS, VPC, Load Balancer Controller)](#4-deploy-infrastructure-eks-vpc-load-balancer-controller)
-5. [Security measures](#5-security-measures)
-6. [Load balancer (ALB)](#6-load-balancer-alb)
-7. [Horizontal scaling (HPA)](#7-horizontal-scaling-hpa)
-8. [Deploy the application](#8-deploy-the-application)
-9. [Boston / East Coast (region)](#9-boston--east-coast-region)
-10. [Checks and operations](#10-checks-and-operations)
+5. [Install Argo CD on EKS (optional)](#5-install-argocd-on-eks-optional)
+6. [Security measures](#6-security-measures)
+7. [Load balancer (ALB)](#7-load-balancer-alb)
+8. [Horizontal scaling (HPA)](#8-horizontal-scaling-hpa)
+9. [Deploy the application](#9-deploy-the-application)
+10. [Boston / East Coast (region)](#10-boston--east-coast-region)
+11. [Checks and operations](#11-checks-and-operations)
 
 ---
 
@@ -40,6 +41,26 @@ Internet → ALB (public subnets) → Ingress → Service → Pods (private subn
 - **kubectl** installed.
 - **Terraform** >= 1.0.
 - **Helm** 3.x (if you deploy the app with Helm).
+
+### 2.1 AWS IAM permissions for Terraform (Option 1 – attach admin / EKS policies to this user)
+
+If you are using an IAM **user** such as `awscli` and see `UnauthorizedOperation` errors during `terraform plan/apply`, make sure that user has enough permissions.
+
+In the **AWS Console**:
+
+1. Go to **IAM → Users → awscli → Permissions**.
+2. Click **Add permissions → Attach policies directly**.
+3. For **testing / lab** environments, you can attach **AdministratorAccess** (full admin).
+4. For more controlled access (recommended for non-lab use), at minimum attach:
+
+   - `AmazonEKSClusterPolicy`
+   - `AmazonEKSServicePolicy`
+   - `AmazonEC2FullAccess`
+   - `AmazonVPCFullAccess`
+   - `CloudWatchLogsFullAccess`
+   - `IAMFullAccess` (or a custom IAM policy that allows at least `iam:CreateRole`, `iam:CreatePolicy`, `iam:AttachRolePolicy`, etc.)
+
+Alternatively, use an **admin role/profile** for Terraform instead of a low‑privilege user and point `AWS_PROFILE` to that profile when running Terraform.
 
 ---
 
@@ -104,7 +125,59 @@ The **AWS Load Balancer Controller** is installed by Terraform; it will create a
 
 ---
 
-## 5. Security measures
+## 5. Install Argo CD on EKS (optional)
+
+Terraform does not install Argo CD. The **argocd** namespace is missing until you install Argo CD on the cluster. Use this when you want to deploy the application via Argo CD (Option B in [Deploy the application](#9-deploy-the-application)) or use the Argo CD UI.
+
+**1. Create the namespace and install Argo CD**
+
+Use **server-side apply** so the ApplicationSet CRD does not hit the 256 KB annotation limit (`metadata.annotations: Too long`):
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side --force-conflicts
+```
+
+**2. Confirm the namespace and wait for pods**
+
+```bash
+kubectl get namespace
+kubectl get pods -n argocd
+```
+
+When all pods in `argocd` are **Running**, Argo CD is ready.
+
+**3. Access the Argo CD UI**
+
+Port-forward the Argo CD server to your machine:
+
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+
+Then open **https://localhost:8080** in your browser.
+
+**4. Get the initial admin password**
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+
+**Windows (PowerShell):**
+
+```powershell
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | ForEach-Object { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+```
+
+Log in with username **admin** and the password from above.
+
+**If you see `applicationsets.argoproj.io is invalid: metadata.annotations: Too long: must have at most 262144 bytes`:** the install manifest must use server-side apply (see command above with `--server-side --force-conflicts`). If you already ran a normal `kubectl apply` and it failed, run the same install command again with `--server-side --force-conflicts`. If the namespace is in a bad state, remove it and redo: `kubectl delete namespace argocd`, then create the namespace and apply again with `--server-side --force-conflicts`.
+
+**If you see `Too many pods` / `0/2 nodes are available: 2 Too many pods`:** each t3.micro node can schedule only about 4 pods; with 2 nodes that is not enough for system pods, AWS Load Balancer Controller, and Argo CD. Increase the node count in Terraform (`node_desired_size` and `node_min_size` to at least 3), then run `terraform apply` so the node group scales up. After new nodes are Ready, pending pods will schedule.
+
+---
+
+## 6. Security measures
 
 These are the security controls we use and how they are applied.
 
@@ -123,7 +196,7 @@ You can add more later (e.g. Pod Security Standards/Admission, network policies,
 
 ---
 
-## 6. Load balancer (ALB)
+## 7. Load balancer (ALB)
 
 - **What:** An **Application Load Balancer (ALB)** in front of the app. It is created by the **AWS Load Balancer Controller** when an Ingress with `ingressClassName: alb` exists.
 - **Where:** Terraform installs the controller in **load-balancer-controller.tf**. The ALB is created in the **public subnets** (they are tagged for ELB).
@@ -145,7 +218,7 @@ Then install/upgrade the Helm chart; the controller will create the ALB and targ
 
 ---
 
-## 7. Horizontal scaling (HPA)
+## 8. Horizontal scaling (HPA)
 
 - **What:** **HorizontalPodAutoscaler** scales the number of pod replicas between a min and max based on CPU and/or memory.
 - **Where:** Helm chart **templates/hpa.yaml** (and **values.yaml**).
@@ -164,7 +237,7 @@ autoscaling:
 
 ---
 
-## 8. Deploy the application
+## 9. Deploy the application
 
 After EKS and the Load Balancer Controller are up:
 
@@ -182,11 +255,11 @@ helm upgrade --install argocdnodejsapp ./helm-chart \
   --set autoscaling.enabled=true
 ```
 
-**Option B – Argo CD:** Point the Argo CD Application at this repo, path **helm-chart**, and use the same values (e.g. in an Argo CD values file or Helm values in the Application spec). The GitHub Actions workflow can still sync from a temp copy with the new image tag; for EKS you’d set `ingress.alb.enabled=true` and `autoscaling.enabled=true` in that copy or in Argo CD.
+**Option B – Argo CD:** Install Argo CD first (see [Install Argo CD on EKS (optional)](#5-install-argocd-on-eks-optional)). Then point the Argo CD Application at this repo, path **helm-chart**, and use the same values (e.g. in an Argo CD values file or Helm values in the Application spec). The GitHub Actions workflow can still sync from a temp copy with the new image tag; for EKS you’d set `ingress.alb.enabled=true` and `autoscaling.enabled=true` in that copy or in Argo CD.
 
 ---
 
-## 9. Boston / East Coast (region)
+## 10. Boston / East Coast (region)
 
 - **Boston** does not have an AWS region; the closest is **us-east-1 (N. Virginia)**. Use it for “Boston server” or “East Coast”.
 - Set in Terraform:
@@ -201,7 +274,7 @@ helm upgrade --install argocdnodejsapp ./helm-chart \
 
 ---
 
-## 10. Checks and operations
+## 11. Checks and operations
 
 - **Terraform**
   - `terraform plan` / `terraform apply` only when you intend to change infra.

@@ -16,6 +16,12 @@ variable "cluster_name" {
   default     = "argocdnodejsapp-eks"
 }
 
+variable "cluster_version" {
+  description = "Kubernetes version for EKS (must match existing cluster or be one minor version higher; e.g. 1.29 → 1.30 only)"
+  type        = string
+  default     = "1.29"
+}
+
 variable "vpc_cidr" {
   description = "CIDR block for VPC"
   type        = string
@@ -41,9 +47,9 @@ variable "node_max_size" {
 }
 
 variable "node_instance_types" {
-  description = "EC2 instance types for EKS nodes"
+  description = "EC2 instance types for EKS nodes (use Free Tier eligible e.g. t3.micro if your account restricts to Free Tier)"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.micro"]
 }
 
 variable "enable_cluster_encryption" {
@@ -62,4 +68,10 @@ variable "tags" {
   description = "Tags applied to all resources"
   type        = map(string)
   default     = {}
+}
+
+variable "install_aws_load_balancer_controller" {
+  description = "Install AWS LB Controller via Helm (set to false on first apply, then run 'aws eks update-kubeconfig', then set true and apply again if you get 'cluster unreachable')"
+  type        = bool
+  default     = true
 }
