@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars and adjust. Do not commit real tfvars with secrets.
+
+aws_region   = "us-east-1"   # Boston / East Coast
+environment  = "dev"
+cluster_name = "argocdnodejsapp-eks"
+
+node_desired_size    = 2
+node_min_size        = 1
+node_max_size        = 5
+node_instance_types  = ["t3.medium"]
+
+enable_cluster_encryption = true
+enable_private_endpoint   = false
+
+tags = {
+  Project = "argocdnodejsapp"
+  Team    = "platform"
+}

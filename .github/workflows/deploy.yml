@@ -4,83 +4,72 @@ on:
   push:
     branches:
       - master
+
 permissions:
   contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 2
 
-      - name: Skip if this push was a version bump
-        id: skip
-        run: |
-          msg=$(git log -1 --pretty=%B)
-          if echo "$msg" | grep -q "chore: bump version to "; then
-            echo "skip_build=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip_build=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Bump version
+      - name: Set version
         id: version
-        if: steps.skip.outputs.skip_build != 'true'
-        run: |
-          if [ -f VERSION ]; then
-            ver=$(cat VERSION)
-          else
-            ver="1.0.0"
-          fi
-          major=$(echo "$ver" | cut -d. -f1)
-          minor=$(echo "$ver" | cut -d. -f2)
-          patch=$(echo "$ver" | cut -d. -f3)
-          if [ "$patch" -ge 100 ]; then
-            minor=$((minor + 2))
-            patch=0
-          else
-            patch=$((patch + 1))
-          fi
-          new_ver="${major}.${minor}.${patch}"
-          echo "VERSION=$new_ver" >> $GITHUB_OUTPUT
-          echo "$new_ver" > VERSION
-
-      - name: Update image tag in k8s/deployment.yaml and ngnix/deployment.yml
-        if: steps.skip.outputs.skip_build != 'true'
-        run: |
-          sed -i "s|image: sardarabdulwakeel/argocdnodejsapp:.*|image: sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}|" k8s/deployment.yaml
-          if [ -f ngnix/deployment.yml ]; then
-            sed -i "s|image: sardarabdulwakeel/argocdnodejsapp:.*|image: sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}|" ngnix/deployment.yml
-          fi
-
-      - name: Commit and push VERSION and deployment files
-        if: steps.skip.outputs.skip_build != 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add VERSION k8s/deployment.yaml
-          [ -f ngnix/deployment.yml ] && git add ngnix/deployment.yml
-          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }} and update deployment image tag"
-          git push || true
-
-      - name: Create and push GitHub tag
-        if: steps.skip.outputs.skip_build != 'true'
-        run: |
-          git tag "v${{ steps.version.outputs.VERSION }}"
-          git push origin "v${{ steps.version.outputs.VERSION }}"
+        run: echo "VERSION=1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - uses: docker/login-action@v3
-        if: steps.skip.outputs.skip_build != 'true'
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push image
-        if: steps.skip.outputs.skip_build != 'true'
         run: |
           docker build -t sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }} -t sardarabdulwakeel/argocdnodejsapp:latest .
           docker push sardarabdulwakeel/argocdnodejsapp:${{ steps.version.outputs.VERSION }}
           docker push sardarabdulwakeel/argocdnodejsapp:latest
+
+      # Helm chart lives in private repo https://github.com/wakeel39/helm-chart.git
+      # Add secret HELM_CHART_REPO_TOKEN (GitHub PAT with repo scope) in repo Settings → Secrets
+      - name: Clone helm-chart repo and set image tag
+        env:
+          HELM_CHART_TOKEN: ${{ secrets.HELM_CHART_REPO_TOKEN }}
+        run: |
+          git clone https://x-access-token:${HELM_CHART_TOKEN}@github.com/wakeel39/helm-chart.git deploy-temp/helm-chart
+          sed -i "s/^  tag: .*/  tag: ${{ steps.version.outputs.VERSION }}/" devops/helm-chart/values.yaml
+
+      - name: Install Argo CD CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x argocd && sudo mv argocd /usr/local/bin/
+
+      - name: Argo CD sync
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+          ARGOCD_APP_NAME: ${{ secrets.ARGOCD_APP_NAME }}
+        run: |
+          argocd login $ARGOCD_SERVER --username "$ARGOCD_USERNAME" --password "$ARGOCD_PASSWORD" --insecure
+          argocd app sync "$ARGOCD_APP_NAME" --local-repo-root "$GITHUB_WORKSPACE/deploy/devops" --local helm-chart --force
+          argocd app wait "$ARGOCD_APP_NAME" --health --timeout 300
+          argocd app get "$ARGOCD_APP_NAME" --show-operation
+
+      # - name: Create and push GitHub tag (visible in repo Tags)
+      #   run: |
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "github-actions[bot]@users.noreply.github.com"
+      #     git tag "v${{ steps.version.outputs.VERSION }}"
+      #     git push origin "v${{ steps.version.outputs.VERSION }}"
+
+      - name: Create Release Tag
+        if: success()
+        continue-on-error: true
+        uses: wakeel39/github-actions/.github/actions/create-release-tag@main
+        with:
+          github_token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          tag: "v${{ steps.version.outputs.VERSION }}"
+
+      - name: Cleanup temp folder
+        run: rm -rf devops/helm-chart
