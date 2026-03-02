@@ -35,7 +35,7 @@ jobs:
         env:
           HELM_CHART_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-          git clone https://x-access-token:${HELM_CHART_TOKEN}@github.com/wakeel39/helm-chart.git deploy-temp/helm-chart
+          git clone https://x-access-token:${HELM_CHART_TOKEN}@github.com/wakeel39/helm-chart.git devops/helm-chart
           sed -i "s/^  tag: .*/  tag: ${{ steps.version.outputs.VERSION }}/" devops/helm-chart/values.yaml
 
       - name: Install Argo CD CLI
