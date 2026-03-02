@@ -1,0 +1,46 @@
+# All values passed through - no hardcoding in templates
+nameOverride: ""
+fullnameOverride: "node-app"
+
+replicas: 1
+namespace: sardar
+
+image:
+  repository: sardarabdulwakeel/argocdnodejsapp
+  tag: 1.0.20
+  pullPolicy: Always
+
+containerPort: 3000
+servicePort: 80
+
+service:
+  name: node-app-service
+  type: NodePort
+
+ingress:
+  enabled: true
+  className: nginx
+  host: node.local
+  path: /
+  pathType: Prefix
+  # Set alb.enabled true on EKS to create an AWS Application Load Balancer
+  alb:
+    enabled: false
+    scheme: internet-facing
+    sslRedirect: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Horizontal Pod Autoscaler (EKS / production)
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
